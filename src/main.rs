@@ -1,3 +1,5 @@
+#![warn(clippy::all)]
+
 use crate::routes::*;
 use crate::store::*;
 use handle_errors::return_error;
