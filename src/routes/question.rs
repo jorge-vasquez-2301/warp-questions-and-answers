@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use handle_errors::Error;
 use warp::hyper::StatusCode;
 
 use crate::{
-    error::Error,
     store::Store,
     types::{extract_pagination, Question, QuestionId},
 };

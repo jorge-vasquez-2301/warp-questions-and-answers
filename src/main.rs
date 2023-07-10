@@ -1,9 +1,8 @@
-use crate::error::*;
 use crate::routes::*;
 use crate::store::*;
+use handle_errors::return_error;
 use warp::{hyper::Method, Filter};
 
-mod error;
 mod routes;
 mod store;
 mod types;
