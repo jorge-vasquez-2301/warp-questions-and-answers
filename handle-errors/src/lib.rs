@@ -9,6 +9,7 @@ pub enum Error {
     ParseError(std::num::ParseIntError),
     MissingParameters,
     DatabaseQueryError,
+    ExternalAPIError(reqwest::Error),
 }
 
 impl std::fmt::Display for Error {
@@ -20,6 +21,9 @@ impl std::fmt::Display for Error {
             Error::MissingParameters => write!(f, "Missing parameter"),
             Error::DatabaseQueryError => {
                 write!(f, "Query could not be executed")
+            }
+            Error::ExternalAPIError(err) => {
+                write!(f, "Cannot execute: {}", err)
             }
         }
     }
@@ -34,6 +38,12 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
         Ok(warp::reply::with_status(
             Error::DatabaseQueryError.to_string(),
             StatusCode::UNPROCESSABLE_ENTITY,
+        ))
+    } else if let Some(crate::Error::ExternalAPIError(e)) = r.find() {
+        tracing::event!(Level::ERROR, "{}", e);
+        Ok(warp::reply::with_status(
+            "Internal Server Error".to_string(),
+            StatusCode::INTERNAL_SERVER_ERROR,
         ))
     } else if let Some(error) = r.find::<CorsForbidden>() {
         tracing::event!(Level::ERROR, "CORS forbidden error: {error}");
