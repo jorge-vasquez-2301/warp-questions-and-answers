@@ -47,13 +47,13 @@ impl Store {
             Ok(questions) => Ok(questions),
             Err(e) => {
                 tracing::event!(tracing::Level::ERROR, "{:?}", e);
-                Err(Error::DatabaseQueryError(e))
+                Err(Error::DatabaseQueryError)
             }
         }
     }
 
-    pub async fn add_question(&self, new_question: NewQuestion) -> Result<Question, sqlx::Error> {
-        sqlx::query("INSERT INTO questions (title, content, tags) VALUES ($1, $2, $3)")
+    pub async fn add_question(&self, new_question: NewQuestion) -> Result<Question, Error> {
+        match sqlx::query("INSERT INTO questions (title, content, tags) VALUES ($1, $2, $3)")
             .bind(new_question.title)
             .bind(new_question.content)
             .bind(new_question.tags)
@@ -65,6 +65,13 @@ impl Store {
             })
             .fetch_one(&self.connection)
             .await
+        {
+            Ok(questions) => Ok(questions),
+            Err(e) => {
+                tracing::event!(tracing::Level::ERROR, "{:?}", e);
+                Err(Error::DatabaseQueryError)
+            }
+        }
     }
 
     pub async fn update_question(
@@ -93,17 +100,23 @@ impl Store {
             Ok(question) => Ok(question),
             Err(e) => {
                 tracing::event!(tracing::Level::ERROR, "{:?}", e);
-                Err(Error::DatabaseQueryError(e))
+                Err(Error::DatabaseQueryError)
             }
         }
     }
 
-    pub async fn delete_question(&self, question_id: i32) -> Result<bool, sqlx::Error> {
-        sqlx::query("DELETE FROM questions WHERE id = $1")
+    pub async fn delete_question(&self, question_id: i32) -> Result<bool, Error> {
+        match sqlx::query("DELETE FROM questions WHERE id = $1")
             .bind(question_id)
             .execute(&self.connection)
             .await
-            .map(|_| true)
+        {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                tracing::event!(tracing::Level::ERROR, "{:?}", e);
+                Err(Error::DatabaseQueryError)
+            }
+        }
     }
 
     pub async fn add_answer(&self, new_answer: NewAnswer) -> Result<Answer, Error> {
@@ -121,7 +134,7 @@ impl Store {
             Ok(answer) => Ok(answer),
             Err(e) => {
                 tracing::event!(tracing::Level::ERROR, "{:?}", e);
-                Err(Error::DatabaseQueryError(e))
+                Err(Error::DatabaseQueryError)
             }
         }
     }

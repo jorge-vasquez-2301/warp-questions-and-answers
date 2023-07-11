@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use handle_errors::Error;
 use tracing::Level;
 use warp::hyper::StatusCode;
 
@@ -35,11 +34,10 @@ pub async fn add_question(
     store: Store,
     new_question: NewQuestion,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Err(e) = store.add_question(new_question).await {
-        return Err(warp::reject::custom(Error::DatabaseQueryError(e)));
+    match store.add_question(new_question).await {
+        Ok(_) => Ok(warp::reply::with_status("Question added", StatusCode::OK)),
+        Err(e) => Err(warp::reject::custom(e)),
     }
-
-    Ok(warp::reply::with_status("Question added", StatusCode::OK))
 }
 
 pub async fn update_question(
@@ -56,12 +54,11 @@ pub async fn update_question(
 }
 
 pub async fn delete_question(id: i32, store: Store) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Err(e) = store.delete_question(id).await {
-        return Err(warp::reject::custom(Error::DatabaseQueryError(e)));
+    match store.delete_question(id).await {
+        Ok(_) => Ok(warp::reply::with_status(
+            format!("Question {} deleted", id),
+            StatusCode::OK,
+        )),
+        Err(e) => Err(warp::reject::custom(e)),
     }
-
-    Ok(warp::reply::with_status(
-        format!("Question {id} deleted"),
-        StatusCode::OK,
-    ))
 }
