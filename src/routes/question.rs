@@ -1,12 +1,37 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use tracing::Level;
 use warp::hyper::StatusCode;
 
 use crate::{
+    profanity::check_profanity,
     store::Store,
     types::{extract_pagination, NewQuestion, Pagination, Question},
 };
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct APIResponse {
+    message: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+struct BadWord {
+    original: String,
+    word: String,
+    deviations: i64,
+    info: i64,
+    #[serde(rename = "replacedLen")]
+    replaced_len: i64,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+struct BadWordsResponse {
+    content: String,
+    bad_words_total: i64,
+    bad_words_list: Vec<BadWord>,
+    censored_content: String,
+}
 
 #[tracing::instrument]
 pub async fn get_questions(
@@ -34,32 +59,23 @@ pub async fn add_question(
     store: Store,
     new_question: NewQuestion,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let client = reqwest::Client::new();
-    let res = client
-        .post("https://api.apilayer.com/bad_words?censor_character=*")
-        .header("apikey", "xxxxx")
-        .body("a list with shit words")
-        .send()
-        .await
-        .map_err(|e| handle_errors::Error::ExternalAPIError(e))?;
+    let title = match check_profanity(new_question.title).await {
+        Ok(res) => res,
+        Err(e) => return Err(warp::reject::custom(e)),
+    };
+    let content = match check_profanity(new_question.content).await {
+        Ok(res) => res,
+        Err(e) => return Err(warp::reject::custom(e)),
+    };
+    let question = NewQuestion {
+        title,
+        content,
+        tags: new_question.tags,
+    };
 
-    match res.error_for_status() {
-        Ok(res) => {
-            let res = res
-                .text()
-                .await
-                .map_err(|e| handle_errors::Error::ExternalAPIError(e))?;
-
-            println!("{}", res);
-
-            match store.add_question(new_question).await {
-                Ok(_) => Ok(warp::reply::with_status("Question added", StatusCode::OK)),
-                Err(e) => Err(warp::reject::custom(e)),
-            }
-        }
-        Err(err) => Err(warp::reject::custom(
-            handle_errors::Error::ExternalAPIError(err),
-        )),
+    match store.add_question(question).await {
+        Ok(question) => Ok(warp::reply::json(&question)),
+        Err(e) => Err(warp::reject::custom(e)),
     }
 }
 

@@ -10,6 +10,8 @@ pub enum Error {
     MissingParameters,
     DatabaseQueryError,
     ExternalAPIError(reqwest::Error),
+    ClientError(APILayerError),
+    ServerError(APILayerError),
 }
 
 impl std::fmt::Display for Error {
@@ -25,11 +27,31 @@ impl std::fmt::Display for Error {
             Error::ExternalAPIError(err) => {
                 write!(f, "Cannot execute: {}", err)
             }
+            Error::ClientError(err) => {
+                write!(f, "External Client error: {}", err)
+            }
+            Error::ServerError(err) => {
+                write!(f, "External Server error: {}", err)
+            }
         }
     }
 }
 
 impl Reject for Error {}
+
+#[derive(Debug, Clone)]
+pub struct APILayerError {
+    pub status: u16,
+    pub message: String,
+}
+
+impl std::fmt::Display for APILayerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Status: {}, Message: {}", self.status, self.message)
+    }
+}
+
+impl Reject for APILayerError {}
 
 #[tracing::instrument]
 pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
@@ -40,6 +62,18 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
             StatusCode::UNPROCESSABLE_ENTITY,
         ))
     } else if let Some(crate::Error::ExternalAPIError(e)) = r.find() {
+        tracing::event!(Level::ERROR, "{}", e);
+        Ok(warp::reply::with_status(
+            "Internal Server Error".to_string(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        ))
+    } else if let Some(crate::Error::ClientError(e)) = r.find() {
+        tracing::event!(Level::ERROR, "{}", e);
+        Ok(warp::reply::with_status(
+            "Internal Server Error".to_string(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        ))
+    } else if let Some(crate::Error::ServerError(e)) = r.find() {
         tracing::event!(Level::ERROR, "{}", e);
         Ok(warp::reply::with_status(
             "Internal Server Error".to_string(),
