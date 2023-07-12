@@ -46,37 +46,28 @@ pub async fn get_questions(
         pagination = extract_pagination(params)?;
     }
 
-    match store
+    Ok(store
         .get_questions(pagination.limit, pagination.offset)
         .await
-    {
-        Ok(res) => Ok(warp::reply::json(&res)),
-        Err(e) => Err(warp::reject::custom(e)),
-    }
+        .map(|questions| warp::reply::json(&questions))?)
 }
 
 pub async fn add_question(
     store: Store,
     new_question: NewQuestion,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let title = match check_profanity(new_question.title).await {
-        Ok(res) => res,
-        Err(e) => return Err(warp::reject::custom(e)),
-    };
-    let content = match check_profanity(new_question.content).await {
-        Ok(res) => res,
-        Err(e) => return Err(warp::reject::custom(e)),
-    };
+    let title = check_profanity(new_question.title).await?;
+    let content = check_profanity(new_question.content).await?;
     let question = NewQuestion {
         title,
         content,
         tags: new_question.tags,
     };
 
-    match store.add_question(question).await {
-        Ok(question) => Ok(warp::reply::json(&question)),
-        Err(e) => Err(warp::reject::custom(e)),
-    }
+    Ok(store
+        .add_question(question)
+        .await
+        .map(|question| warp::reply::json(&question))?)
 }
 
 pub async fn update_question(
@@ -84,20 +75,24 @@ pub async fn update_question(
     store: Store,
     question: Question,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let res = store
+    let title = check_profanity(question.title).await?;
+    let content = check_profanity(question.content).await?;
+    let question = Question {
+        id: question.id,
+        title,
+        content,
+        tags: question.tags,
+    };
+
+    Ok(store
         .update_question(question, id)
         .await
-        .map_err(warp::reject::custom)?;
-
-    Ok(warp::reply::json(&res))
+        .map(|question| warp::reply::json(&question))?)
 }
 
 pub async fn delete_question(id: i32, store: Store) -> Result<impl warp::Reply, warp::Rejection> {
-    match store.delete_question(id).await {
-        Ok(_) => Ok(warp::reply::with_status(
-            format!("Question {} deleted", id),
-            StatusCode::OK,
-        )),
-        Err(e) => Err(warp::reject::custom(e)),
-    }
+    Ok(store
+        .delete_question(id)
+        .await
+        .map(|id| warp::reply::with_status(format!("Question {} deleted", id), StatusCode::OK))?)
 }
