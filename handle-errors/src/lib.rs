@@ -9,7 +9,8 @@ pub enum Error {
     ParseError(std::num::ParseIntError),
     MissingParameters,
     DatabaseQueryError,
-    ExternalAPIError(reqwest::Error),
+    ReqwestAPIError(reqwest::Error),
+    MiddlewareReqwestAPIError(reqwest_middleware::Error),
     ClientError(APILayerError),
     ServerError(APILayerError),
 }
@@ -24,8 +25,11 @@ impl std::fmt::Display for Error {
             Error::DatabaseQueryError => {
                 write!(f, "Query could not be executed")
             }
-            Error::ExternalAPIError(err) => {
+            Error::ReqwestAPIError(err) => {
                 write!(f, "Cannot execute: {}", err)
+            }
+            Error::MiddlewareReqwestAPIError(err) => {
+                write!(f, "External API error: {}", err)
             }
             Error::ClientError(err) => {
                 write!(f, "External Client error: {}", err)
@@ -61,7 +65,13 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
             Error::DatabaseQueryError.to_string(),
             StatusCode::UNPROCESSABLE_ENTITY,
         ))
-    } else if let Some(crate::Error::ExternalAPIError(e)) = r.find() {
+    } else if let Some(crate::Error::ReqwestAPIError(e)) = r.find() {
+        tracing::event!(Level::ERROR, "{}", e);
+        Ok(warp::reply::with_status(
+            "Internal Server Error".to_string(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        ))
+    } else if let Some(crate::Error::MiddlewareReqwestAPIError(e)) = r.find() {
         tracing::event!(Level::ERROR, "{}", e);
         Ok(warp::reply::with_status(
             "Internal Server Error".to_string(),
