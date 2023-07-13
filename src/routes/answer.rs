@@ -1,8 +1,13 @@
 use warp::hyper::StatusCode;
 
-use crate::{profanity::check_profanity, store::Store, types::NewAnswer};
+use crate::{
+    profanity::check_profanity,
+    store::Store,
+    types::{NewAnswer, Session},
+};
 
 pub async fn add_answer(
+    session: Session,
     store: Store,
     new_answer: NewAnswer,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -14,7 +19,7 @@ pub async fn add_answer(
     };
 
     Ok(store
-        .add_answer(answer)
+        .add_answer(answer, session.account_id)
         .await
         .map(|_| warp::reply::with_status("Answer added", StatusCode::OK))?)
 }

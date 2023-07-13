@@ -7,7 +7,7 @@ use warp::hyper::StatusCode;
 use crate::{
     profanity::check_profanity,
     store::Store,
-    types::{extract_pagination, NewQuestion, Pagination, Question},
+    types::{extract_pagination, NewQuestion, Pagination, Question, Session},
 };
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -53,6 +53,7 @@ pub async fn get_questions(
 }
 
 pub async fn add_question(
+    session: Session,
     store: Store,
     new_question: NewQuestion,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -65,32 +66,42 @@ pub async fn add_question(
     };
 
     Ok(store
-        .add_question(question)
+        .add_question(question, session.account_id)
         .await
         .map(|question| warp::reply::json(&question))?)
 }
 
 pub async fn update_question(
     id: i32,
+    session: Session,
     store: Store,
     question: Question,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let title = check_profanity(question.title).await?;
-    let content = check_profanity(question.content).await?;
-    let question = Question {
-        id: question.id,
-        title,
-        content,
-        tags: question.tags,
-    };
+    let account_id = session.account_id;
+    if store.is_question_owner(id, &account_id).await? {
+        let title = check_profanity(question.title).await?;
+        let content = check_profanity(question.content).await?;
+        let question = Question {
+            id: question.id,
+            title,
+            content,
+            tags: question.tags,
+        };
 
-    Ok(store
-        .update_question(question, id)
-        .await
-        .map(|question| warp::reply::json(&question))?)
+        Ok(store
+            .update_question(question, id, account_id)
+            .await
+            .map(|question| warp::reply::json(&question))?)
+    } else {
+        Err(warp::reject::custom(handle_errors::Error::Unauthorized))
+    }
 }
 
-pub async fn delete_question(id: i32, store: Store) -> Result<impl warp::Reply, warp::Rejection> {
+pub async fn delete_question(
+    id: i32,
+    _session: Session,
+    store: Store,
+) -> Result<impl warp::Reply, warp::Rejection> {
     Ok(store
         .delete_question(id)
         .await

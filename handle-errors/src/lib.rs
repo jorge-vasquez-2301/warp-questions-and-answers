@@ -9,6 +9,8 @@ pub enum Error {
     ParseError(std::num::ParseIntError),
     MissingParameters,
     WrongPassword,
+    CannotDecryptToken,
+    Unauthorized,
     ArgonLibraryError(argon2::Error),
     DatabaseQueryError(sqlx::Error),
     ReqwestAPIError(reqwest::Error),
@@ -27,6 +29,8 @@ impl std::fmt::Display for Error {
             Error::WrongPassword => {
                 write!(f, "Wrong password")
             }
+            Error::CannotDecryptToken => write!(f, "Cannot decrypt error"),
+            Error::Unauthorized => write!(f, "No permission to change the underlying resource"),
             Error::ArgonLibraryError(_) => {
                 write!(f, "Cannot verifiy password")
             }
@@ -96,6 +100,12 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
             "Internal Server Error".to_string(),
             StatusCode::INTERNAL_SERVER_ERROR,
         ))
+    } else if let Some(crate::Error::Unauthorized) = r.find() {
+        tracing::event!(Level::ERROR, "Not matching account id");
+        Ok(warp::reply::with_status(
+            "No permission to change underlying resource".to_string(),
+            StatusCode::UNAUTHORIZED,
+        ))
     } else if let Some(crate::Error::WrongPassword) = r.find() {
         tracing::event!(Level::ERROR, "Entered wrong password");
         Ok(warp::reply::with_status(
@@ -121,19 +131,19 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
             StatusCode::INTERNAL_SERVER_ERROR,
         ))
     } else if let Some(error) = r.find::<CorsForbidden>() {
-        tracing::event!(Level::ERROR, "CORS forbidden error: {error}");
+        tracing::event!(Level::ERROR, "CORS forbidden error: {}", error);
         Ok(warp::reply::with_status(
             error.to_string(),
             StatusCode::FORBIDDEN,
         ))
     } else if let Some(error) = r.find::<BodyDeserializeError>() {
-        tracing::event!(Level::ERROR, "Cannot deserizalize request body: {error}");
+        tracing::event!(Level::ERROR, "Cannot deserizalize request body: {}", error);
         Ok(warp::reply::with_status(
             error.to_string(),
             StatusCode::UNPROCESSABLE_ENTITY,
         ))
     } else if let Some(error) = r.find::<Error>() {
-        tracing::event!(Level::ERROR, "{error}");
+        tracing::event!(Level::ERROR, "{}", error);
         Ok(warp::reply::with_status(
             error.to_string(),
             StatusCode::UNPROCESSABLE_ENTITY,
