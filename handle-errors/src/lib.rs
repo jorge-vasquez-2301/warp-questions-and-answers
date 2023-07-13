@@ -8,6 +8,8 @@ use warp::{Rejection, Reply};
 pub enum Error {
     ParseError(std::num::ParseIntError),
     MissingParameters,
+    WrongPassword,
+    ArgonLibraryError(argon2::Error),
     DatabaseQueryError(sqlx::Error),
     ReqwestAPIError(reqwest::Error),
     MiddlewareReqwestAPIError(reqwest_middleware::Error),
@@ -22,6 +24,12 @@ impl std::fmt::Display for Error {
                 write!(f, "Cannot parse parameter: {}", err)
             }
             Error::MissingParameters => write!(f, "Missing parameter"),
+            Error::WrongPassword => {
+                write!(f, "Wrong password")
+            }
+            Error::ArgonLibraryError(_) => {
+                write!(f, "Cannot verifiy password")
+            }
             Error::DatabaseQueryError(_) => {
                 write!(f, "Query could not be executed")
             }
@@ -87,6 +95,12 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
         Ok(warp::reply::with_status(
             "Internal Server Error".to_string(),
             StatusCode::INTERNAL_SERVER_ERROR,
+        ))
+    } else if let Some(crate::Error::WrongPassword) = r.find() {
+        tracing::event!(Level::ERROR, "Entered wrong password");
+        Ok(warp::reply::with_status(
+            "Wrong E-Mail/Password combination".to_string(),
+            StatusCode::UNAUTHORIZED,
         ))
     } else if let Some(crate::Error::MiddlewareReqwestAPIError(e)) = r.find() {
         tracing::event!(Level::ERROR, "{}", e);

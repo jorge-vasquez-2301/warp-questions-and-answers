@@ -90,11 +90,19 @@ async fn main() {
         .and(warp::body::json())
         .and_then(routes::register);
 
+    let login = warp::post()
+        .and(warp::path("login"))
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(routes::login);
+
     let routes = get_questions
         .or(add_question)
         .or(add_answer)
         .or(update_question)
         .or(delete_question)
+        .or(login)
         .or(registration)
         .with(cors)
         .with(warp::trace::request())
