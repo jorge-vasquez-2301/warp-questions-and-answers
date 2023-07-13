@@ -8,7 +8,7 @@ use warp::{Rejection, Reply};
 pub enum Error {
     ParseError(std::num::ParseIntError),
     MissingParameters,
-    DatabaseQueryError,
+    DatabaseQueryError(sqlx::Error),
     ReqwestAPIError(reqwest::Error),
     MiddlewareReqwestAPIError(reqwest_middleware::Error),
     ClientError(APILayerError),
@@ -22,7 +22,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Cannot parse parameter: {}", err)
             }
             Error::MissingParameters => write!(f, "Missing parameter"),
-            Error::DatabaseQueryError => {
+            Error::DatabaseQueryError(_) => {
                 write!(f, "Query could not be executed")
             }
             Error::ReqwestAPIError(err) => {
@@ -57,14 +57,31 @@ impl std::fmt::Display for APILayerError {
 
 impl Reject for APILayerError {}
 
+const DUPLICATE_KEY: u32 = 23505;
+
 #[tracing::instrument]
 pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
-    if let Some(Error::DatabaseQueryError) = r.find() {
+    if let Some(Error::DatabaseQueryError(e)) = r.find() {
         tracing::event!(Level::ERROR, "Database query error");
-        Ok(warp::reply::with_status(
-            Error::DatabaseQueryError.to_string(),
-            StatusCode::UNPROCESSABLE_ENTITY,
-        ))
+        match e {
+            sqlx::Error::Database(err) => {
+                if err.code().unwrap().parse::<u32>().unwrap() == DUPLICATE_KEY {
+                    Ok(warp::reply::with_status(
+                        "Account already exsists".to_string(),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                    ))
+                } else {
+                    Ok(warp::reply::with_status(
+                        "Cannot update data".to_string(),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                    ))
+                }
+            }
+            _ => Ok(warp::reply::with_status(
+                "Cannot update data".to_string(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            )),
+        }
     } else if let Some(crate::Error::ReqwestAPIError(e)) = r.find() {
         tracing::event!(Level::ERROR, "{}", e);
         Ok(warp::reply::with_status(

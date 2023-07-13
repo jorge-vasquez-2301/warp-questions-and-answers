@@ -83,11 +83,19 @@ async fn main() {
         .and(warp::body::form())
         .and_then(add_answer);
 
+    let registration = warp::post()
+        .and(warp::path("registration"))
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(routes::register);
+
     let routes = get_questions
         .or(add_question)
         .or(add_answer)
         .or(update_question)
         .or(delete_question)
+        .or(registration)
         .with(cors)
         .with(warp::trace::request())
         .recover(return_error);
