@@ -13,6 +13,7 @@ pub enum Error {
     Unauthorized,
     ArgonLibraryError(argon2::Error),
     DatabaseQueryError(sqlx::Error),
+    MigrationError(sqlx::migrate::MigrateError),
     ReqwestAPIError(reqwest::Error),
     MiddlewareReqwestAPIError(reqwest_middleware::Error),
     ClientError(APILayerError),
@@ -37,6 +38,7 @@ impl std::fmt::Display for Error {
             Error::DatabaseQueryError(_) => {
                 write!(f, "Query could not be executed")
             }
+            Error::MigrationError(_) => write!(f, "Cannot migrate data"),
             Error::ReqwestAPIError(err) => {
                 write!(f, "Cannot execute: {}", err)
             }

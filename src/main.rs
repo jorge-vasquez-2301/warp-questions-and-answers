@@ -1,67 +1,45 @@
 #![warn(clippy::all)]
 
-use crate::routes::*;
-use crate::store::*;
-use config::Config;
 use handle_errors::return_error;
 use tracing_subscriber::fmt::format::FmtSpan;
 use warp::{hyper::Method, Filter};
 
+mod config;
 mod profanity;
 mod routes;
 mod store;
 mod types;
 
-#[derive(Debug, Default, serde::Deserialize, PartialEq)]
-struct Args {
-    log_level: String,
-    /// URL for the postgres database
-    database_host: String,
-    /// PORT number for the database connection
-    database_port: u16,
-    /// Database name
-    database_name: String,
-    /// Web server port
-    port: u16,
-}
-
 #[tokio::main]
-async fn main() {
-    let config = Config::builder()
-        .add_source(config::File::with_name("setup"))
-        .build()
-        .unwrap();
+async fn main() -> Result<(), handle_errors::Error> {
+    let config = config::Config::new().expect("Config can't be set");
 
-    let config = config.try_deserialize::<Args>().unwrap();
+    let log_filter = format!(
+        "handle_errors={},rust_web_dev={},warp={}",
+        config.log_level, config.log_level, config.log_level
+    );
 
-    let log_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| {
-        format!(
-            "handle_errors={},rust_web_dev={},warp={}",
-            config.log_level, config.log_level, config.log_level
-        )
-    });
+    let store = store::Store::new(&format!(
+        "postgres://{}:{}@{}:{}/{}",
+        config.db_user, config.db_password, config.db_host, config.db_port, config.db_name
+    ))
+    .await
+    .map_err(|e| handle_errors::Error::DatabaseQueryError(e))?;
+
+    sqlx::migrate!()
+        .run(&store.clone().connection)
+        .await
+        .map_err(|e| handle_errors::Error::MigrationError(e))?;
+
+    let store_filter = warp::any().map(move || store.clone());
 
     tracing_subscriber::fmt()
         // Use the filter we built above to determine which traces to record.
         .with_env_filter(log_filter)
-        // Record an event when each span closes.
-        // This can be used to time our
+        // Record an event when each span closes. This can be used to time our
         // routes' durations!
         .with_span_events(FmtSpan::CLOSE)
         .init();
-
-    let store = Store::new(&format!(
-        "postgres://{}:{}/{}",
-        config.database_host, config.database_port, config.database_name
-    ))
-    .await;
-
-    sqlx::migrate!()
-        .run(&store.connection)
-        .await
-        .expect("Cannot run migration");
-
-    let store_filter = warp::any().map(move || store.clone());
 
     let cors = warp::cors()
         .allow_any_origin()
@@ -73,23 +51,7 @@ async fn main() {
         .and(warp::path::end())
         .and(warp::query())
         .and(store_filter.clone())
-        .and_then(get_questions)
-        .with(warp::trace(|info| {
-            tracing::info_span!(
-                  "get_questions request",
-                  method = %info.method(),
-                  path = %info.path(),
-                  id = %uuid::Uuid::new_v4(),
-            )
-        }));
-
-    let add_question = warp::post()
-        .and(warp::path("questions"))
-        .and(warp::path::end())
-        .and(routes::auth())
-        .and(store_filter.clone())
-        .and(warp::body::json())
-        .and_then(add_question);
+        .and_then(routes::get_questions);
 
     let update_question = warp::put()
         .and(warp::path("questions"))
@@ -98,7 +60,7 @@ async fn main() {
         .and(routes::auth())
         .and(store_filter.clone())
         .and(warp::body::json())
-        .and_then(update_question);
+        .and_then(routes::update_question);
 
     let delete_question = warp::delete()
         .and(warp::path("questions"))
@@ -106,7 +68,15 @@ async fn main() {
         .and(warp::path::end())
         .and(routes::auth())
         .and(store_filter.clone())
-        .and_then(delete_question);
+        .and_then(routes::delete_question);
+
+    let add_question = warp::post()
+        .and(warp::path("questions"))
+        .and(warp::path::end())
+        .and(routes::auth())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(routes::add_question);
 
     let add_answer = warp::post()
         .and(warp::path("answers"))
@@ -114,7 +84,7 @@ async fn main() {
         .and(routes::auth())
         .and(store_filter.clone())
         .and(warp::body::form())
-        .and_then(add_answer);
+        .and_then(routes::add_answer);
 
     let registration = warp::post()
         .and(warp::path("registration"))
@@ -131,15 +101,17 @@ async fn main() {
         .and_then(routes::login);
 
     let routes = get_questions
-        .or(add_question)
-        .or(add_answer)
         .or(update_question)
+        .or(add_question)
         .or(delete_question)
-        .or(login)
+        .or(add_answer)
         .or(registration)
+        .or(login)
         .with(cors)
         .with(warp::trace::request())
         .recover(return_error);
 
-    warp::serve(routes).run(([127, 0, 0, 1], config.port)).await;
+    warp::serve(routes).run(([0, 0, 0, 0], config.port)).await;
+
+    Ok(())
 }
