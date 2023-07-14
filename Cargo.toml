@@ -29,6 +29,7 @@ paseto = "2.0"
 chrono = "0.4.19"
 clap = { version = "4.3.4", features = ["derive"] }
 dotenv = "0.15.0"
+mock-server = { path = "mock-server", version = " 0.1.0" }
 
 [build-dependencies]
 platforms = "2.0.0"
