@@ -1,5 +1,4 @@
 use clap::Parser;
-use dotenv;
 use std::env;
 
 /// Q&A web service API
@@ -34,11 +33,11 @@ impl Config {
         dotenv::dotenv().ok();
         let config = Config::parse();
 
-        if let Err(_) = env::var("BAD_WORDS_API_KEY") {
+        if env::var("BAD_WORDS_API_KEY").is_err() {
             panic!("BadWords API key not set");
         }
 
-        if let Err(_) = env::var("PASETO_KEY") {
+        if env::var("PASETO_KEY").is_err() {
             panic!("PASETO_KEY not set");
         }
 
@@ -46,7 +45,7 @@ impl Config {
             .ok()
             .map(|val| val.parse::<u16>())
             .unwrap_or(Ok(config.port))
-            .map_err(|e| handle_errors::Error::ParseError(e))?;
+            .map_err(handle_errors::Error::ParseError)?;
 
         let db_user = env::var("POSTGRES_USER").unwrap_or(config.db_user.to_owned());
         let db_password = env::var("POSTGRES_PASSWORD").unwrap_or(config.db_password.to_owned());
@@ -62,7 +61,7 @@ impl Config {
             db_host,
             db_port: db_port
                 .parse::<u16>()
-                .map_err(|e| handle_errors::Error::ParseError(e))?,
+                .map_err(handle_errors::Error::ParseError)?,
             db_name,
         })
     }
