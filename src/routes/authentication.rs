@@ -63,7 +63,6 @@ fn issue_token(account_id: AccountId) -> String {
     paseto::tokens::PasetoBuilder::new()
         .set_encryption_key(&Vec::from(key.as_bytes()))
         .set_expiration(&dt)
-        .set_not_before(&Utc::now())
         .set_claim("account_id", serde_json::json!(account_id))
         .build()
         .expect("Failed to construct paseto token w/ builder!")
@@ -86,4 +85,23 @@ fn hash_password(password: &[u8]) -> String {
     let salt = rand::thread_rng().gen::<[u8; 32]>();
     let config = Config::default();
     argon2::hash_encoded(password, &salt, &config).unwrap()
+}
+
+#[cfg(test)]
+mod authentication_tests {
+    use super::{auth, issue_token, AccountId};
+
+    #[tokio::test]
+    async fn post_questions_auth() {
+        std::env::set_var("PASETO_KEY", "RANDOM WORDS WINTER MACINTOSH PC");
+        let token = issue_token(AccountId(3));
+
+        let filter = auth();
+
+        let res = warp::test::request()
+            .header("Authorization", token)
+            .filter(&filter);
+
+        assert_eq!(res.await.unwrap().account_id, AccountId(3));
+    }
 }
