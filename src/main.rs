@@ -2,6 +2,7 @@
 
 use crate::routes::*;
 use crate::store::*;
+use config::Config;
 use handle_errors::return_error;
 use tracing_subscriber::fmt::format::FmtSpan;
 use warp::{hyper::Method, Filter};
@@ -11,10 +12,34 @@ mod routes;
 mod store;
 mod types;
 
+#[derive(Debug, Default, serde::Deserialize, PartialEq)]
+struct Args {
+    log_level: String,
+    /// URL for the postgres database
+    database_host: String,
+    /// PORT number for the database connection
+    database_port: u16,
+    /// Database name
+    database_name: String,
+    /// Web server port
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() {
-    let log_filter = std::env::var("RUST_LOG")
-        .unwrap_or_else(|_| "practical_rust_book=info,warp=error".to_owned());
+    let config = Config::builder()
+        .add_source(config::File::with_name("setup"))
+        .build()
+        .unwrap();
+
+    let config = config.try_deserialize::<Args>().unwrap();
+
+    let log_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| {
+        format!(
+            "handle_errors={},rust_web_dev={},warp={}",
+            config.log_level, config.log_level, config.log_level
+        )
+    });
 
     tracing_subscriber::fmt()
         // Use the filter we built above to determine which traces to record.
@@ -25,7 +50,11 @@ async fn main() {
         .with_span_events(FmtSpan::CLOSE)
         .init();
 
-    let store = Store::new("postgres://postgres:postgres@localhost:5432/rustwebdev").await;
+    let store = Store::new(&format!(
+        "postgres://{}:{}/{}",
+        config.database_host, config.database_port, config.database_name
+    ))
+    .await;
 
     sqlx::migrate!()
         .run(&store.connection)
@@ -112,5 +141,5 @@ async fn main() {
         .with(warp::trace::request())
         .recover(return_error);
 
-    warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+    warp::serve(routes).run(([127, 0, 0, 1], config.port)).await;
 }

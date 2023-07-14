@@ -1,6 +1,6 @@
 [package]
-name = "warp-questions-and-answers"
-version = "0.1.0"
+name = "rust-web-dev"
+version = "1.0.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -27,3 +27,4 @@ rand = "0.8"
 rust-argon2 = "1.0"
 paseto = "2.0"
 chrono = "0.4.19"
+config = { version = "0.13.1", features = ["toml"] }
