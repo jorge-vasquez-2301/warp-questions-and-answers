@@ -30,7 +30,6 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Result<Config, handle_errors::Error> {
-        dotenv::dotenv().ok();
         let config = Config::parse();
 
         if env::var("BAD_WORDS_API_KEY").is_err() {
@@ -65,4 +64,15 @@ impl Config {
             db_name,
         })
     }
+}
+
+#[cfg(test)]
+mod config_tests {
+    use super::*;
+
+    // #[test]
+    // fn unset_api_key() {
+    //     let result = std::panic::catch_unwind(|| Config::new());
+    //     assert!(result.is_err());
+    // }
 }
